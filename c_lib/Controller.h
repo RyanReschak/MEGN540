@@ -45,9 +45,16 @@ typedef struct { Filter_Data_t controller; float kp; float target_pos; float tar
 /**
  * Function Saturate saturates a value to be within the range.
  */
-inline float Saturate( float value, float ABS_MAX )
+inline float Saturate( float value, float ABS_MAX, float ABS_MIN )
 {
-    return (value > ABS_MAX)?ABS_MAX:(value < -ABS_MAX)?-ABS_MAX:value;
+    float s =  (value > ABS_MAX)?ABS_MAX:(value < -ABS_MAX)?-ABS_MAX:value;
+    if (s < ABS_MIN && s > 0 ) {
+        return ABS_MIN;
+    } else if (s > -ABS_MIN && s < 0){
+        return -ABS_MIN;
+    } else{
+        return s;
+    }
 }
 
 /**
@@ -65,7 +72,7 @@ void Controller_Set_Target_Velocity( Controller_t* p_cont, float vel );
  * Function Controller_Set_Target_Position sets the target postion for the 
  * controller, this also sets the target velocity to 0.
  */
-void Controller_Set_Target_Position( Controller_t* p_cont, float vel );
+void Controller_Set_Target_Position( Controller_t* p_cont, float pos );
 
 /**
  * Function Controller_Update takes in a new measurement and returns the

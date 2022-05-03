@@ -37,6 +37,9 @@
 
 #include "SerialIO.h"
 #include "Timing.h"
+#include "MotorPWM.h"
+#include "Controller.h"
+#include "Encoder.h"
 
 /** Message Driven State Machine Flags */
 typedef struct MSG_FLAG { bool active; float duration; Time_t last_trigger_time; } MSG_FLAG_t;
@@ -46,6 +49,17 @@ MSG_FLAG_t mf_restart;       ///<-- This flag indicates that the device received
 MSG_FLAG_t mf_loop_timer;    ///<-- Indicates if the system should report time to complete a loop.
 MSG_FLAG_t mf_time_float_send;   ///<-- Indicates if the system should report the time to send a float.
 MSG_FLAG_t mf_send_time;     ///<-- Indicates if the system should send the current time.
+MSG_FLAG_t mf_time_out; /// Times and clear buffer
+MSG_FLAG_t mf_battery; /// Reports Batery voltage on request
+MSG_FLAG_t mf_encoder; /// Reports Encoder Rads on request
+MSG_FLAG_t mf_motor_pwm; /// Motor PWM setting
+MSG_FLAG_t mf_motor_id; /// Reports Encoder Rads on request
+MSG_FLAG_t mf_control_pos; ///Sets motor control for Position
+MSG_FLAG_t mf_control_vel; ///Sets motor control for Velocity
+MSG_FLAG_t mf_controller; //Controller for doing Updates
+
+Controller_t left_cont;
+Controller_t right_cont;
 
 /**
  * Function MSG_FLAG_Execute indicates if the action associated with the message flag should be executed

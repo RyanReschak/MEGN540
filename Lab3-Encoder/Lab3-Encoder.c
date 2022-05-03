@@ -30,7 +30,9 @@
 
 #include "../c_lib/SerialIO.h"
 #include "../c_lib/Timing.h"
-
+#include "../c_lib/MEGN540_MessageHandeling.h"
+#include "../c_lib/Battery_Monitor.h"
+#include "../c_lib/Encoder.h"
 /** Main program entry point. This routine configures the hardware required by the application, then
  *  enters a loop to run the application tasks in sequence.
  */
@@ -38,12 +40,85 @@ int main(void)
 {
     SetupTimer0();         // initialize timer zero functionality
     USB_SetupHardware();   // initialize USB
-
+    Message_Handling_Init();  //iniitlize Message handling
     GlobalInterruptEnable(); // Enable Global Interrupts for USB and Timer etc.
+    Battery_Monitor_Init(); //initialize battery adc
+    Encoders_Init();        //initalize encoder interrupts
 
+    float bat_volt = 0.0f;
+    Time_t bat_time = GetTime();
+    const float THRESH_LOW_VOLT = 4.0f; // 4 Batteries in series and lowest is 1.0v before damage
     for (;;)
     {
-        USB_Echo_Task();
-        USB_USBTask();
+        USB_Upkeep_Task();
+        
+        if (0.2 < SecondsSince(&bat_time)) {
+            bat_volt = Battery_Voltage();
+            bat_time = GetTime();
+            if(bat_volt <= THRESH_LOW_VOLT) {
+                struct __attribute__((__packed__)) {char let[7]; float volt; } msg = {
+                    .let = {'B', 'A', 'T', ' ', 'L', 'O', 'W'},
+                    //.let = {'B', 'L'},
+                    .volt = bat_volt
+                };
+                usb_send_msg("c7sf", '!', &msg, sizeof(msg));
+
+            }
+        }
+
+        //flag cases
+        if (MSG_FLAG_Execute(&mf_loop_timer)){
+            struct __attribute__((__packed__)) { uint8_t c; float f; } data;
+            data.c = 1;
+            data.f = SecondsSince(&mf_loop_timer.last_trigger_time);
+            usb_send_msg("ccf", 'T', &data, sizeof(data));
+            if(mf_loop_timer.duration <= 0.0f) {
+                mf_loop_timer.active = false;
+            } else {
+                mf_loop_timer.last_trigger_time = GetTime();
+            }
+        }
+        if(MSG_FLAG_Execute(&mf_send_time)){
+            struct __attribute__((__packed__)) { uint8_t c; float f; } data;
+            data.c = 0;
+            data.f = GetTimeSec();
+            usb_send_msg("ccf", 'T', &data, sizeof(data));
+            if(mf_send_time.duration <= 0.0f) {
+                mf_send_time.active = false;
+            }
+            else {
+                mf_send_time.last_trigger_time = GetTime();
+            }
+        }
+        if(MSG_FLAG_Execute(&mf_battery)){
+            
+            usb_send_msg("cf", 'B', &bat_volt, sizeof(bat_volt));
+            if(mf_battery.duration <= 0.0f){
+                mf_battery.active = false;
+            } else {
+                mf_battery.last_trigger_time = GetTime();
+            }
+        }
+        if(MSG_FLAG_Execute(&mf_encoder)){
+            struct __attribute__((__packed__)) { float l; float r; } data;
+            data.l = Rad_Left();
+            data.r = Rad_Right();
+            usb_send_msg("cff", 'E', &data, sizeof(data));
+            if(mf_encoder.duration <= 0.0f){
+                mf_encoder.active = false;
+            } else {
+                mf_encoder.last_trigger_time = GetTime();
+            }
+        }
+        if(MSG_FLAG_Execute(&mf_time_out)) {
+            usb_flush_input_buffer();
+            mf_time_out.active = false;
+        }
+        if(MSG_FLAG_Execute(&mf_restart)){
+            break;
+        }
+        
+        Message_Handling_Task();
     }
+    return 0;
 }

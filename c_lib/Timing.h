@@ -47,6 +47,10 @@
 
 #include <ctype.h>
 
+#define BV(bit)               (1 << bit)
+#define set_bit(byte, bit)    (byte |= BV(bit)) 
+#define clear_bit(byte, bit)  (byte &= ~BV(bit))
+#define toggle_bit(byte, bit) (byte ^= BV(bit))
 
 /**
  * Millisecond counters are also provided for use in other functions to control operations

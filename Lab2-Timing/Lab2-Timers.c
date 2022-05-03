@@ -30,7 +30,7 @@
 
 #include "../c_lib/SerialIO.h"
 #include "../c_lib/Timing.h"
-
+#include "../c_lib/MEGN540_MessageHandeling.h"
 /** Main program entry point. This routine configures the hardware required by the application, then
  *  enters a loop to run the application tasks in sequence.
  */
@@ -38,12 +38,47 @@ int main(void)
 {
     SetupTimer0();         // initialize timer zero functionality
     USB_SetupHardware();   // initialize USB
-
+    Message_Handling_Init();  //iniitlize Message handling
     GlobalInterruptEnable(); // Enable Global Interrupts for USB and Timer etc.
 
     for (;;)
     {
-        USB_Echo_Task();
-        USB_USBTask();
+        
+        USB_Upkeep_Task();
+        
+        //flag cases
+        if (MSG_FLAG_Execute(&mf_loop_timer)){
+            struct __attribute__((__packed__)) { uint8_t c; float f; } data;
+            data.c = 1;
+            data.f = SecondsSince(&mf_loop_timer.last_trigger_time);
+            usb_send_msg("ccf", 'T', &data, sizeof(data));
+            if(mf_loop_timer.duration == -1.0f) {
+                mf_loop_timer.active = false;
+            } else {
+                mf_loop_timer.last_trigger_time = GetTime();
+            }
+        }
+        if(MSG_FLAG_Execute(&mf_send_time)){
+            struct __attribute__((__packed__)) { uint8_t c; float f; } data;
+            data.c = 0;
+            data.f = GetTimeSec();
+            usb_send_msg("ccf", 'T', &data, sizeof(data));
+            if(mf_send_time.duration == -1.0f) {
+                mf_send_time.active = false;
+            }
+            else {
+                mf_send_time.last_trigger_time = GetTime();
+            }
+        }
+        if(MSG_FLAG_Execute(&mf_time_out)) {
+            usb_flush_input_buffer();
+            mf_time_out.active = false;
+        }
+        if(MSG_FLAG_Execute(&mf_restart)){
+            break;
+        }
+        
+        Message_Handling_Task();
     }
+    return 0;
 }

@@ -48,6 +48,11 @@
 #include <math.h>          // for M_PI
 #include <stdbool.h>       // for bool type
 
+#define BV(bit)               (1 << bit)
+#define set_bit(byte, bit)    (byte |= BV(bit)) 
+#define clear_bit(byte, bit)  (byte &= ~BV(bit))
+#define toggle_bit(byte, bit) (byte ^= BV(bit))
+
 /**
  * Function Encoders_Init initializes the encoders, sets up the pin change interrupts, and zeros the initial encoder
  * counts.

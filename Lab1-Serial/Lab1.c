@@ -50,7 +50,7 @@ int main(void)
         // Below here you'll process state-machine flags.
         if( MSG_FLAG_Execute( &mf_restart ) )
         {
-            // re initialzie your stuff...
+            return 0;
         }
     }
 }

@@ -41,6 +41,14 @@
 
 #include <avr/io.h>        // For pin input/output access
 #include <ctype.h>         // For int32_t type
+#include "Filter.h"
+
+#define BV(bit)               (1 << bit)
+#define clear_bit(byte, bit)  (byte &= ~BV(bit))
+#define set_bit(byte, bit)    (byte |= BV(bit)) 
+#define toggle_bit(byte, bit) (byte ^= BV(bit))
+
+Filter_Data_t bat_filter;
 
 /**
  * Function Battery_Monitor_Init initializes the Battery Monitor to record the current battery voltages.

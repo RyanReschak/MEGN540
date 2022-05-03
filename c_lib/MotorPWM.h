@@ -56,7 +56,15 @@
 #include <avr/io.h>        // For pin input/output access
 #include <ctype.h>         // For int32_t type
 #include <stdbool.h>       // For bool
+#include <stdlib.h>
 
+#define BV(bit)               (1 << bit)
+#define set_bit(byte, bit)    (byte |= BV(bit)) 
+#define clear_bit(byte, bit)  (byte &= ~BV(bit))
+#define toggle_bit(byte, bit) (byte ^= BV(bit))
+
+// A Union to assist with reading the LSB and MSB in the  16 bit register
+union { struct {uint8_t LSB; uint8_t MSB; } split; uint16_t value;} data;
 
 /**
  * Function MotorPWM_Init initializes the motor PWM on Timer 1 for PWM based voltage control of the motors.

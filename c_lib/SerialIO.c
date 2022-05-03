@@ -60,8 +60,8 @@
 
 // *** MEGN540  ***
 // Ring Buffer Objects
-static struct RingBuffer_C _usb_receive_buffer;
-static struct RingBuffer_C _usb_send_buffer;
+static struct Ring_Buffer_C _usb_receive_buffer;
+static struct Ring_Buffer_C _usb_send_buffer;
 
 
 /** Contains the current baud rate and other settings of the first virtual serial port. While this demo does not use
@@ -82,8 +82,10 @@ void USB_Upkeep_Task()
 {
     USB_USBTask();
 
-    // *** MEGN540  ***
     // Get next byte from the USB hardware, send next byte to the USB hardware
+    usb_read_next_byte();
+    usb_write_next_byte();
+    //COME BACK TO THIS LATER (probably need to fill buffer somehow
 }
 
 /** Configures the board hardware and chip peripherals for the demo's functionality. */
@@ -101,8 +103,9 @@ void USB_SetupHardware(void)
 	/* Hardware Initialization */
 	USB_Init();
 
-	// *** MEGN540  ***
 	// INITIALIZE RING BUFFERS AND OTHER DATA
+	rb_initialize_C(&_usb_receive_buffer);
+	rb_initialize_C(&_usb_send_buffer);
 }
 
 /** Event handler for the USB_Connect event. This indicates that the device is enumerating via the status LEDs and
@@ -240,11 +243,29 @@ void USB_Echo_Task(void)
  */
 void usb_read_next_byte()
 {
-    // *** MEGN540  ***
-    // YOUR CODE HERE!  You'll need to take inspiration from the USB_Echo_Task above but
-    // will need to adjust to make it non blocking. You'll need to dig into the library to understand
-    // how the function above is working then interact at a slightly lower level, but still higher than
-    // register level.
+    /* Device must be connected and configured for the task to run */
+	if (USB_DeviceState != DEVICE_STATE_Configured)
+	  return;
+
+	/* Select the Serial Rx Endpoint */
+	Endpoint_SelectEndpoint(CDC_RX_EPADDR);
+
+	/* Check to see if any data has been received */
+	if (Endpoint_IsOUTReceived())
+	{
+		
+		if(!(Endpoint_IsReadWriteAllowed()))
+			Endpoint_ClearOUT();
+		else {
+			//Put data in receive buffer
+			rb_push_back_C(&_usb_receive_buffer, Endpoint_Read_8());
+			/*struct __attribute__((__packed__)) { uint8_t d; char c; } data;
+			data.c = usb_msg_peek();
+			data.d = rb_length_C(&_usb_receive_buffer);
+			usb_send_msg("cbc", 'd', &data, sizeof(data));*/
+		}
+
+	}
 }
 
 /**
@@ -253,11 +274,33 @@ void usb_read_next_byte()
  */
 void usb_write_next_byte()
 {
-    // *** MEGN540  ***
-    // YOUR CODE HERE!  You'll need to take inspiration from the USB_Echo_Task above but
-    // will need to adjust to make it non blocking. You'll need to dig into the library to understand
-    // how the function above is working then interact at a slightly lower level, but still higher than
-    // register level.
+	/*if (rb_length_C(&_usb_send_buffer) == 0)
+	    return;
+	*/
+	/* Device must be connected and configured for the task to run */
+	if (USB_DeviceState != DEVICE_STATE_Configured)
+	  return;
+
+	/* Select the Serial Tx Endpoint */
+	Endpoint_SelectEndpoint(CDC_TX_EPADDR);
+
+	/* Check to see if any data has been received */
+	if (Endpoint_IsINReady() && rb_length_C(&_usb_send_buffer) != 0) 
+	{
+		
+		uint8_t tx_epsize_space_left = CDC_TXRX_EPSIZE;
+		while(tx_epsize_space_left && rb_length_C(&_usb_send_buffer)){
+			Endpoint_Write_8(rb_pop_front_C(&_usb_send_buffer));
+			tx_epsize_space_left--;
+		}
+		Endpoint_ClearIN();
+
+		if(tx_epsize_space_left == 0){
+			Endpoint_WaitUntilReady();
+			Endpoint_ClearIN();
+		}
+	}
+
 }
 
 /**
@@ -266,8 +309,7 @@ void usb_write_next_byte()
  */
 void usb_send_byte(uint8_t byte)
 {
-    // *** MEGN540  ***
-    // YOUR CODE HERE
+    rb_push_back_C(&_usb_send_buffer, byte);
 }
 
 /**
@@ -277,8 +319,11 @@ void usb_send_byte(uint8_t byte)
  */
 void usb_send_data(void* p_data, uint8_t data_len)
 {
-    // *** MEGN540  ***
-    // YOUR CODE HERE
+    for(uint8_t i = 0; i < data_len; i++) {
+	uint8_t val = *(uint8_t *)p_data;
+	usb_send_byte(val);
+	p_data++;
+    }
 }
 
 /**
@@ -287,8 +332,12 @@ void usb_send_data(void* p_data, uint8_t data_len)
  */
 void usb_send_str(char* p_str)
 {
-    // *** MEGN540  ***
-    // YOUR CODE HERE. Remember c-srtings are null terminated.
+    uint8_t i = 0;
+    while (p_str[i] != '\0') {
+		usb_send_byte(p_str[i]);
+		i++;
+    }
+    usb_send_byte('\0');
 }
 
 /**
@@ -323,6 +372,19 @@ void usb_send_msg(char* format, char cmd, void* p_data, uint8_t data_len )
     //      usb_send_byte <-- cmd
     //      usb_send_data <-- p_data
     // FUNCTION END
+    
+    // Determine format length
+
+    
+    // Calculate message length
+    uint8_t msg_len = strlen(format)+ 2 + data_len;
+    
+    // Order all parts of message in output ring buffer
+    usb_send_byte(msg_len);
+    usb_send_str(format);
+    usb_send_byte(cmd);
+    usb_send_data(p_data, data_len);
+    
 }
 
 /**
@@ -331,9 +393,7 @@ void usb_send_msg(char* format, char cmd, void* p_data, uint8_t data_len )
  */
 uint8_t usb_msg_length()
 {
-    // *** MEGN540  ***
-    // YOUR CODE HERE
-    return 0;
+    return rb_length_C(&_usb_receive_buffer);
 }
 
 /**
@@ -342,9 +402,10 @@ uint8_t usb_msg_length()
  */
 uint8_t usb_msg_peek()
 {
-    // *** MEGN540  ***
-    // YOUR CODE HERE
-    return 0;
+    if(usb_msg_length() == 0)
+		return NULL;
+    
+    return rb_get_C(&_usb_receive_buffer, 0);
 }
 
 /**
@@ -353,9 +414,10 @@ uint8_t usb_msg_peek()
  */
 uint8_t usb_msg_get()
 {
-    // *** MEGN540  ***
-    // YOUR CODE HERE
-    return 0;
+    if(usb_msg_length() == 0)
+		return NULL;
+	
+    return rb_pop_front_C(&_usb_receive_buffer);
 }
 
 /**
@@ -369,9 +431,17 @@ uint8_t usb_msg_get()
  */
 bool usb_msg_read_into(void* p_obj, uint8_t data_len)
 {
-    // *** MEGN540  ***
-    //YOUR CODE HERE
-    return false;
+    if(data_len > usb_msg_length())
+		return false;
+	
+    for(uint8_t i = 0; i < data_len; i++) {
+		char* p_val = p_obj;
+		*(p_val) = rb_pop_front_C(&_usb_receive_buffer);
+		p_obj++;
+	
+    }
+    
+    return true;
 }
 
 /**
@@ -380,7 +450,14 @@ bool usb_msg_read_into(void* p_obj, uint8_t data_len)
  */
 void usb_flush_input_buffer()
 {
-    // *** MEGN540  ***
-    // YOUR CODE HERE
+    for (uint8_t i = 0; i < usb_msg_length(); i++) {
+		rb_pop_front_C(&_usb_receive_buffer);
+    }
 }
 
+void usb_flush_output_buffer()
+{
+    while (rb_length_C(&_usb_send_buffer) != 0) {
+		rb_pop_front_C(&_usb_send_buffer);
+    }
+}
